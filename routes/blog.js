@@ -3,20 +3,21 @@ const multer = require("multer");
 const path = require("path");
 const Blog = require("../models/blog");
 const Comment = require("../models/comment");
+const { ImageUploadUtil, upload } = require("../helpers/cloudinary");
 
 const router = Router();
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.resolve("./public/uploads/"));
-  },
-  filename: function (req, file, cb) {
-    const filename = `${Date.now()}-${file.originalname}`;
-    cb(null, filename);
-  },
-});
+// const storage = multer.diskStorage({
+//   destination: function (req, file, cb) {
+//     cb(null, path.resolve("./public/uploads/"));
+//   },
+//   filename: function (req, file, cb) {
+//     const filename = `${Date.now()}-${file.originalname}`;
+//     cb(null, filename);
+//   },
+// });
 
-const upload = multer({ storage: storage });
+// const upload = multer({ storage: storage });
 
 router.get("/add-blog", (req, res) => {
   if (!req.user) return res.redirect("/user/signin");
@@ -38,17 +39,30 @@ router.get("/:id", async (req, res) => {
   });
 });
 
-router.post("/", upload.single("coverImgUrl"), async (req, res) => {
-  console.log(req.body, req.file);
-  const { title, body } = req.body;
-  const blog = await Blog.create({
-    title,
-    body,
-    createdBy: req.user._id,
-    coverImgUrl: `/uploads/${req.file.filename}`,
-  });
-  return res.redirect(`/blog/${blog._id}`);
-});
+const handleImgUpload = async (req, res) => {
+  try {
+    const b64 = Buffer.from(req.file.buffer).toString("base64");
+    const url = "data:" + req.file.mimetype + ";base64," + b64;
+    const result = await ImageUploadUtil(url);
+
+    const { title, body } = req.body;
+    const blog = await Blog.create({
+      title,
+      body,
+      createdBy: req.user._id,
+      coverImgUrl: result.url,
+    });
+    return res.redirect(`/blog/${blog._id}`);
+  } catch (error) {
+    console.log(error);
+    return res.json({
+      success: false,
+      message: "Error occured",
+    });
+  }
+};
+
+router.post("/", upload.single("coverImgUrl"), handleImgUpload);
 
 router.post("/comment/:blogId", async (req, res) => {
   console.log("comment");
